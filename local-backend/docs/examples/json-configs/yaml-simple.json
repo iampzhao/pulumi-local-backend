@@ -1,0 +1,10 @@
+{
+  "project_name": "simple-app",
+  "stack_name": "test",
+  "pulumi_template": "yaml", 
+  "project_description": "Simple application infrastructure using YAML configuration",
+  "target_repo_url": "https://github.com/mycompany/simple-app.git",
+  "target_github_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "create_documentation": true,
+  "include_examples": true
+}

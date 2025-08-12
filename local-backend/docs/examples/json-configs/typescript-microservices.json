@@ -1,0 +1,10 @@
+{
+  "project_name": "microservices-platform",
+  "stack_name": "local",
+  "pulumi_template": "typescript",
+  "project_description": "Microservices platform infrastructure with Lambda, API Gateway, and DynamoDB",
+  "target_repo_url": "https://github.com/mycompany/microservices-platform.git",
+  "target_github_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "create_documentation": true,
+  "include_examples": true
+}

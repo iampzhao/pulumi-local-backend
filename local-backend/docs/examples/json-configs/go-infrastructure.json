@@ -1,0 +1,10 @@
+{
+  "project_name": "core-infrastructure", 
+  "stack_name": "dev",
+  "pulumi_template": "go",
+  "project_description": "Core infrastructure components including VPC, subnets, and security groups",
+  "target_repo_url": "https://github.com/mycompany/core-infrastructure.git",
+  "target_github_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "create_documentation": false,
+  "include_examples": false
+}

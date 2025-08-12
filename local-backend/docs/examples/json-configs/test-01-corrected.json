@@ -1,0 +1,10 @@
+{
+  "project_name": "test-01",
+  "stack_name": "dev",
+  "pulumi_template": "python",
+  "project_description": "My test project for Pulumi Factory local backend",
+  "target_repo_url": "https://github.com/iampzhao/test-pulumi-factory-local-01.git",
+  "target_github_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "create_documentation": true,
+  "include_examples": true
+}

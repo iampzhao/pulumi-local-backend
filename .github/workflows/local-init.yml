@@ -1,0 +1,423 @@
+# Pulumi Project Factory - Local Backend Initialization Workflow
+#
+# This workflow creates and initializes Pulumi projects with local backend storage.
+# No AWS resources are created - projects use local file-based state storage.
+# Perfect for development, testing, and getting started with Pulumi.
+#
+# WORKFLOW CHARACTERISTICS:
+# - No AWS credentials required
+# - No cloud resources created
+# - Local file-based state storage
+# - Creates complete Pulumi project structure
+# - Pushes to target GitHub repository
+# - Includes comprehensive documentation
+# - Ready for local development and testing
+
+name: 'Pulumi Project Factory - Initialize Local Backend Project'
+
+# Manual trigger only - ensures controlled execution with required inputs
+on:
+  workflow_dispatch:
+    inputs:
+      config_json:
+        description: 'JSON configuration for the Local Pulumi Factory (see local-backend/README.md for format)'
+        required: true
+        type: string
+
+# Environment variables for the entire workflow
+env:
+  # Pulumi configuration - local backend specific
+  PULUMI_CONFIG_PASSPHRASE: ""  # Use empty passphrase for automation
+  PULUMI_SKIP_UPDATE_CHECK: "true"
+  PULUMI_BACKEND_URL: "file://~"  # Force local backend
+  
+jobs:
+  initialize-local-pulumi-project:
+    name: 'Initialize Local Backend Pulumi Project'
+    runs-on: ubuntu-latest
+    
+    # Security: Limit permissions to minimum required
+    permissions:
+      contents: read
+      
+    steps:
+      # Step 1: Checkout the factory repository
+      # This repository contains the workflow and helper scripts
+      - name: 'Checkout Factory Repository'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+        
+      # Step 2: Set up Python environment
+      # Python is used for project configuration and repository operations
+      - name: 'Set up Python'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          
+      # Step 3: Install Python dependencies
+      # Install required packages for project generation and configuration
+      - name: 'Install Python Dependencies'
+        run: |
+          echo "Installing Python dependencies for local operations..."
+          pip install -r local-backend/requirements.txt
+          echo "Python dependencies installed successfully"
+          
+      # Step 4: Parse and validate JSON configuration
+      # Extract all configuration parameters from the JSON input
+      - name: 'Parse Configuration'
+        id: parse-config
+        run: |
+          echo "Parsing JSON configuration..."
+          
+          # Parse the JSON configuration  
+          CONFIG='${{ github.event.inputs.config_json }}'
+          echo "Raw config: $CONFIG"
+          
+          # Write config to temporary file for better parsing
+          echo "$CONFIG" > /tmp/config.json
+          
+          # Validate JSON format with detailed error reporting
+          if ! jq empty /tmp/config.json 2>/tmp/json_error.log; then
+            echo "ERROR: Invalid JSON format in configuration"
+            echo "JSON Error Details:"
+            cat /tmp/json_error.log
+            echo ""
+            echo "Common issues:"
+            echo "- Missing quotes around field names or values"
+            echo "- Extra commas or missing commas"
+            echo "- Unbalanced brackets or braces"
+            echo "- Special characters in strings"
+            echo ""
+            echo "Please verify your JSON at https://jsonlint.com"
+            echo ""
+            echo "Expected format:"
+            echo '{"project_name":"test-01","stack_name":"dev","pulumi_template":"python","project_description":"description","target_repo_url":"https://github.com/user/repo.git","target_github_token":"ghp_xxx","create_documentation":true,"include_examples":true}'
+            echo ""
+            echo "Your JSON:"
+            cat /tmp/config.json
+            exit 1
+          fi
+          
+          echo "JSON validation successful"
+          
+          # Extract configuration parameters using the temp file
+          PROJECT_NAME=$(jq -r '.project_name // empty' /tmp/config.json)
+          STACK_NAME=$(jq -r '.stack_name // empty' /tmp/config.json)
+          PULUMI_TEMPLATE=$(jq -r '.pulumi_template // "python"' /tmp/config.json)
+          TARGET_REPO_URL=$(jq -r '.target_repo_url // empty' /tmp/config.json)
+          TARGET_GITHUB_TOKEN=$(jq -r '.target_github_token // empty' /tmp/config.json)
+          PROJECT_DESCRIPTION=$(jq -r '.project_description // "A Pulumi project initialized with local backend"' /tmp/config.json)
+          CREATE_DOCUMENTATION=$(jq -r '.create_documentation // true' /tmp/config.json)
+          INCLUDE_EXAMPLES=$(jq -r '.include_examples // true' /tmp/config.json)
+          
+          # Validate required parameters
+          if [[ -z "$PROJECT_NAME" ]]; then
+            echo "ERROR: project_name is required"
+            exit 1
+          fi
+          
+          if [[ -z "$STACK_NAME" ]]; then
+            echo "ERROR: stack_name is required"  
+            exit 1
+          fi
+          
+          if [[ -z "$TARGET_REPO_URL" ]]; then
+            echo "ERROR: target_repo_url is required"
+            exit 1
+          fi
+          
+          if [[ -z "$TARGET_GITHUB_TOKEN" ]]; then
+            echo "ERROR: target_github_token is required"
+            exit 1
+          fi
+          
+          # Validate template choice
+          case "$PULUMI_TEMPLATE" in
+            python|typescript|go|csharp|yaml)
+              echo "Using Pulumi template: $PULUMI_TEMPLATE"
+              ;;
+            *)
+              echo "ERROR: Unsupported pulumi_template: $PULUMI_TEMPLATE"
+              echo "Supported templates: python, typescript, go, csharp, yaml"
+              exit 1
+              ;;
+          esac
+          
+          # Set outputs for other steps
+          echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
+          echo "stack_name=$STACK_NAME" >> $GITHUB_OUTPUT
+          echo "pulumi_template=$PULUMI_TEMPLATE" >> $GITHUB_OUTPUT
+          echo "target_repo_url=$TARGET_REPO_URL" >> $GITHUB_OUTPUT
+          echo "target_github_token=$TARGET_GITHUB_TOKEN" >> $GITHUB_OUTPUT
+          echo "project_description=$PROJECT_DESCRIPTION" >> $GITHUB_OUTPUT
+          echo "create_documentation=$CREATE_DOCUMENTATION" >> $GITHUB_OUTPUT
+          echo "include_examples=$INCLUDE_EXAMPLES" >> $GITHUB_OUTPUT
+          
+          # Set environment variables for subsequent steps
+          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+          echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
+          echo "PULUMI_TEMPLATE=$PULUMI_TEMPLATE" >> $GITHUB_ENV
+          echo "PROJECT_DESCRIPTION=$PROJECT_DESCRIPTION" >> $GITHUB_ENV
+          echo "CREATE_DOCUMENTATION=$CREATE_DOCUMENTATION" >> $GITHUB_ENV
+          echo "INCLUDE_EXAMPLES=$INCLUDE_EXAMPLES" >> $GITHUB_ENV
+          
+          echo "Configuration parsed and validated successfully"
+          
+      # Step 5: Install Pulumi CLI
+      # Install the latest version of Pulumi CLI for local backend operations
+      - name: 'Install Pulumi CLI'
+        uses: pulumi/actions@v4
+        
+      # Step 6: Verify Pulumi installation and local backend
+      # Ensure Pulumi is properly configured for local backend usage
+      - name: 'Verify Pulumi Installation'
+        run: |
+          echo "Verifying Pulumi installation..."
+          
+          # Check Pulumi version
+          pulumi version
+          
+          # Verify we're using local backend
+          pulumi whoami
+          
+          # List any existing stacks (should be empty for fresh install)
+          pulumi stack ls || echo "No existing stacks found (expected for fresh installation)"
+          
+          echo "Pulumi installation verified successfully"
+          
+      # Step 7: Clone target repository
+      # Clone the repository where the Pulumi project will be created
+      - name: 'Clone Target Repository'
+        run: |
+          echo "Cloning target repository..."
+          
+          # Extract repository name from URL
+          REPO_NAME=$(basename "${{ steps.parse-config.outputs.target_repo_url }}" .git)
+          echo "Repository name: $REPO_NAME"
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+          
+          # Clone with authentication
+          git clone "https://${{ steps.parse-config.outputs.target_github_token }}@${TARGET_REPO_URL#https://}" ./target-repo
+          
+          # Navigate to repository and check status
+          cd ./target-repo
+          git status
+          git log --oneline -n 5 || echo "Repository has no commits yet"
+          
+          echo "Target repository cloned successfully"
+        env:
+          TARGET_REPO_URL: ${{ steps.parse-config.outputs.target_repo_url }}
+          
+      # Step 8: Create new branch for Pulumi project
+      # Create a feature branch for the new Pulumi project
+      - name: 'Create Project Branch'
+        run: |
+          cd ./target-repo
+          
+          # Configure git
+          git config user.name "Pulumi Factory Bot"
+          git config user.email "pulumi-factory@noreply.github.com"
+          
+          # Create and checkout new branch
+          BRANCH_NAME="init-pulumi-local-${PROJECT_NAME}-${STACK_NAME}"
+          echo "Creating branch: $BRANCH_NAME"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          
+          git checkout -b "$BRANCH_NAME"
+          echo "Branch created and checked out successfully"
+          
+      # Step 9: Initialize Pulumi project with local backend
+      # Create the Pulumi project using the specified template
+      - name: 'Initialize Pulumi Project'
+        run: |
+          cd ./target-repo
+          
+          echo "Initializing Pulumi project with local backend..."
+          echo "Project: $PROJECT_NAME"
+          echo "Stack: $STACK_NAME"  
+          echo "Template: $PULUMI_TEMPLATE"
+          echo "Description: $PROJECT_DESCRIPTION"
+          
+          # Create project directory
+          mkdir -p "$PROJECT_NAME"
+          cd "$PROJECT_NAME"
+          
+          # Initialize Pulumi project non-interactively
+          pulumi new "$PULUMI_TEMPLATE" \
+            --name "$PROJECT_NAME" \
+            --description "$PROJECT_DESCRIPTION" \
+            --stack "$STACK_NAME" \
+            --yes
+          
+          # Verify project creation
+          ls -la
+          cat Pulumi.yaml
+          
+          echo "Pulumi project initialized successfully with local backend"
+
+      # Step 9.5: Install Python dependencies in the new Pulumi project
+      - name: 'Install Project Requirements'
+        run: |
+          cd "./target-repo/$PROJECT_NAME"
+          if [ -f venv/bin/activate ]; then
+            # Activate the project's venv before installing
+            source venv/bin/activate
+            echo "Virtualenv activated, installing requirements..."
+            pip install -r requirements.txt
+            echo "Requirements installed in project virtualenv"
+            deactivate
+          else
+            echo "No virtualenv found! Installing globally (not recommended)..."
+            pip install -r requirements.txt
+          fi
+
+          
+      # Step 10: Configure project for local development
+      # Set up configuration values and local development settings
+      - name: 'Configure Project for Local Development'
+        run: |
+          cd "./target-repo/$PROJECT_NAME"
+          
+          echo "Configuring Pulumi project for local development..."
+          
+          python ../../local-backend/scripts/configure_local_project.py \
+            --project-name "$PROJECT_NAME" \
+            --stack-name "$STACK_NAME" \
+            --template "$PULUMI_TEMPLATE" \
+            --create-docs "$CREATE_DOCUMENTATION" \
+            --include-examples "$INCLUDE_EXAMPLES"
+          
+          echo "Project configured successfully for local development"
+          
+      # Step 11: Generate project documentation
+      # Create comprehensive documentation for the local Pulumi project
+      - name: 'Generate Project Documentation'
+        run: |
+          cd "./target-repo/$PROJECT_NAME"
+          
+          echo "Generating project documentation..."
+          
+          python ../../local-backend/scripts/generate_documentation.py \
+            --project-name "$PROJECT_NAME" \
+            --stack-name "$STACK_NAME" \
+            --template "$PULUMI_TEMPLATE" \
+            --description "$PROJECT_DESCRIPTION"
+          
+          echo "Project documentation generated successfully"
+          
+      # Step 12: Create example infrastructure code
+      # Generate example code based on the selected template
+      - name: 'Create Example Infrastructure'
+        if: ${{ steps.parse-config.outputs.include_examples == 'true' }}
+        run: |
+          cd "./target-repo/$PROJECT_NAME"
+          
+          echo "Creating example infrastructure code..."
+          
+          python ../../local-backend/scripts/create_examples.py \
+            --project-name "$PROJECT_NAME" \
+            --stack-name "$STACK_NAME" \
+            --template "$PULUMI_TEMPLATE"
+          
+          echo "Example infrastructure code created successfully"
+          
+      # Step 13: Validate Pulumi configuration
+      # Ensure the project is properly configured and ready for use
+      - name: 'Validate Project Configuration'
+        run: |
+          cd "./target-repo/$PROJECT_NAME"
+          
+          echo "Validating Pulumi project configuration..."
+          
+          # Check project configuration
+          pulumi config
+          
+          # Validate stack configuration
+          pulumi stack --show-name
+          
+          # List available stacks
+          pulumi stack ls
+          
+          # Preview the infrastructure (should show no resources for new project)
+          # pulumi preview
+          
+          echo "Project validation completed successfully"
+          
+      # Step 14: Commit and push changes
+      # Commit all generated files and push to the target repository
+      - name: 'Commit and Push Changes'
+        run: |
+          cd ./target-repo
+          
+          echo "Committing and pushing changes..."
+          
+          # Add all files
+          git add .
+          
+          # Show what will be committed
+          git status
+          
+          # Create commit with detailed message
+          git commit -m "Initialize Pulumi project: ${PROJECT_NAME}/${STACK_NAME}
+
+          - Created Pulumi ${PULUMI_TEMPLATE} project with local backend
+          - Configured stack: ${STACK_NAME}
+          - Added comprehensive documentation and examples
+          - Ready for local development and testing
+          - Backend: Local file-based storage
+          
+          Generated by Pulumi Factory (Local Backend)"
+          
+          # Push to remote repository
+          git push origin "$BRANCH_NAME"
+          
+          echo "Changes committed and pushed successfully"
+          echo "Branch: $BRANCH_NAME"
+          
+      # Step 15: Output summary
+      # Provide summary information about the created project
+      - name: 'Output Project Summary'
+        run: |
+          echo "=========================================="
+          echo "Pulumi Project Factory - Local Backend"
+          echo "Project Initialization Complete"
+          echo "=========================================="
+          echo ""
+          echo "Project Details:"
+          echo "  - Project Name: $PROJECT_NAME"
+          echo "  - Stack Name: $STACK_NAME"
+          echo "  - Template: $PULUMI_TEMPLATE"
+          echo "  - Backend: Local file-based storage"
+          echo "  - Target Repository: ${{ steps.parse-config.outputs.target_repo_url }}"
+          echo "  - Branch: $BRANCH_NAME"
+          echo ""
+          echo "Generated Files:"
+          echo "  - Pulumi project configuration (Pulumi.yaml, Pulumi.$STACK_NAME.yaml)"
+          echo "  - Infrastructure code ($PULUMI_TEMPLATE template)"
+          echo "  - Comprehensive documentation (README.md, DEVELOPMENT.md)"
+          echo "  - Development setup guide"
+          if [[ "$INCLUDE_EXAMPLES" == "true" ]]; then
+            echo "  - Example infrastructure code"
+          fi
+          echo ""
+          echo "Next Steps:"
+          echo "  1. Review the new branch in the target repository"
+          echo "  2. Create a Pull Request to merge the changes"
+          echo "  3. Clone the repository locally for development"
+          echo "  4. Run 'pulumi up' to deploy your infrastructure"
+          echo ""
+          echo "Local Development Commands:"
+          echo "  cd $PROJECT_NAME"
+          echo "  pulumi stack select $STACK_NAME"
+          echo "  pulumi preview  # Preview changes"
+          echo "  pulumi up       # Deploy infrastructure"
+          echo ""
+          echo "Security Notes:"
+          echo "  - No cloud credentials required for local backend"
+          echo "  - State files are stored locally in .pulumi/ directory"
+          echo "  - Remember to backup your local state files"
+          echo "  - Consider migrating to cloud backend for production use"
+          echo ""
+          echo "=========================================="

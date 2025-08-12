@@ -1,0 +1,10 @@
+{
+  "project_name": "my-web-app",
+  "stack_name": "development",
+  "pulumi_template": "python",
+  "project_description": "Web application infrastructure with S3, EC2, and RDS components",
+  "target_repo_url": "https://github.com/mycompany/my-web-app.git",
+  "target_github_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "create_documentation": true,
+  "include_examples": true
+}
